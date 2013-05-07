@@ -1,9 +1,9 @@
 <?php
 /**
  * GitHub strategy for Opauth
- * 
+ *
  * More information on Opauth: http://opauth.org
- * 
+ *
  * @copyright    Copyright © 2012 U-Zyn Chua (http://uzyn.com)
  * @link         http://opauth.org
  * @package      Opauth.GitHubStrategy
@@ -12,21 +12,27 @@
 
 /**
  * GitHub strategy for Opauth
- * 
+ *
  * @package			Opauth.GitHub
  */
 class GitHubStrategy extends OpauthStrategy {
-	
+
+	/**
+	 * User-agent string with library version
+	 * @see http://developer.github.com/v3/#user-agent-required
+	 */
+	private $userAgent = "Opauth-GitHub/0.1.0";
+
 	/**
 	 * Compulsory config keys, listed as unassociative arrays
 	 */
 	public $expects = array('client_id', 'client_secret');
-	
+
 	/**
 	 * Optional config keys, without predefining any default values.
 	 */
 	public $optionals = array('redirect_uri', 'scope', 'state');
-	
+
 	/**
 	 * Optional config keys with respective default values, listed as associative arrays
 	 * eg. array('scope' => 'email');
@@ -34,7 +40,7 @@ class GitHubStrategy extends OpauthStrategy {
 	public $defaults = array(
 		'redirect_uri' => '{complete_url_to_strategy}oauth2callback'
 	);
-	
+
 	/**
 	 * Auth request
 	 */
@@ -48,10 +54,10 @@ class GitHubStrategy extends OpauthStrategy {
 		foreach ($this->optionals as $key) {
 			if (!empty($this->strategy[$key])) $params[$key] = $this->strategy[$key];
 		}
-		
+
 		$this->clientGet($url, $params);
 	}
-	
+
 	/**
 	 * Internal callback, after OAuth
 	 */
@@ -59,7 +65,7 @@ class GitHubStrategy extends OpauthStrategy {
 		if (array_key_exists('code', $_GET) && !empty($_GET['code'])) {
 			$code = $_GET['code'];
 			$url = 'https://github.com/login/oauth/access_token';
-			
+
 			$params = array(
 				'code' => $code,
 				'client_id' => $this->strategy['client_id'],
@@ -67,13 +73,18 @@ class GitHubStrategy extends OpauthStrategy {
 				'redirect_uri' => $this->strategy['redirect_uri'],
 			);
 			if (!empty($this->strategy['state'])) $params['state'] = $this->strategy['state'];
-			
-			$response = $this->serverPost($url, $params, null, $headers);
+
+			// Set UserAgent request header
+			$options = array('http' => array(
+				'header' => 'User-Agent: ' . $this->userAgent
+			));
+
+			$response = $this->serverPost($url, $params, $options, $headers);
 			parse_str($response, $results);
-			
+
 			if (!empty($results) && !empty($results['access_token'])) {
 				$user = $this->user($results['access_token']);
-				
+
 				$this->auth = array(
 					'uid' => $user['id'],
 					'info' => array(),
@@ -82,7 +93,7 @@ class GitHubStrategy extends OpauthStrategy {
 					),
 					'raw' => $user
 				);
-				
+
 				$this->mapProfile($user, 'name', 'info.name');
 				$this->mapProfile($user, 'blog', 'info.urls.blog');
 				$this->mapProfile($user, 'avatar_url', 'info.image');
@@ -92,7 +103,7 @@ class GitHubStrategy extends OpauthStrategy {
 				$this->mapProfile($user, 'email', 'info.email');
 				$this->mapProfile($user, 'location', 'info.location');
 				$this->mapProfile($user, 'url', 'info.urls.github_api');
-				
+
 				$this->callback();
 			}
 			else {
@@ -113,19 +124,24 @@ class GitHubStrategy extends OpauthStrategy {
 				'code' => 'oauth2callback_error',
 				'raw' => $_GET
 			);
-			
+
 			$this->errorCallback($error);
 		}
 	}
-	
+
 	/**
 	 * Queries GitHub v3 API for user info
 	 *
-	 * @param string $access_token 
+	 * @param string $access_token
 	 * @return array Parsed JSON results
 	 */
 	private function user($access_token) {
-		$user = $this->serverGet('https://api.github.com/user', array('access_token' => $access_token), null, $headers);
+		// Set UserAgent request header
+		$options = array('http' => array(
+			'header' => 'User-Agent: ' . $this->userAgent
+		));
+
+		$user = $this->serverGet('https://api.github.com/user', array('access_token' => $access_token), $options, $headers);
 
 		if (!empty($user)) {
 			return $this->recursiveGetObjectVars(json_decode($user));
